@@ -511,6 +511,35 @@ void printKnownDistances(const ConvexDistanceGraph& cdg)
 	printf("----------------------------------\n");
 }
 
+void recusivePrint(const ConvexDistanceGraph& cdg, int target, int dist = 0, std::string chain = "", int score = 0)
+{
+	int newscore = score + (cdg.nodes[target].dist == -1 ? 1 : 0);
+	
+	if(dist == K-2 && cdg.nodes[target].edges.size() == 0 && newscore >= K-2)
+	{
+		printf("%s%s | Score: %1i\n", chain.c_str(), cdg.toString(target).c_str(), newscore);
+		return;
+	}
+
+	std::string newchain = chain + cdg.toString(target) + " > ";
+
+	for(int j : cdg.nodes[target].edges)
+	{
+		recusivePrint(cdg, j, dist+1, newchain, newscore);
+	}
+}
+
+void printAlmostChains2(const ConvexDistanceGraph& cdg)
+{
+	printf("Some long chains (V2):\n----------------------------------\n");
+	
+	for(int i = K; i < totalNodes; i++) if(cdg.nodes[i].lowBound <= 1)
+	{
+		recusivePrint(cdg, i);
+	}
+	printf("----------------------------------\n");
+}
+
 void printAlmostChains(const ConvexDistanceGraph& cdg)
 {
 	printf("Some long chains:\n----------------------------------\n");
@@ -572,7 +601,8 @@ void fullPrint(const ConvexDistanceGraph& cdg)
 	
 	printKnownDistances(cdg);
 
-	printAlmostChains(cdg);
+	// printAlmostChains(cdg);
+	printAlmostChains2(cdg);
 
 	printEdgesKnown(cdg);
 }
@@ -709,7 +739,7 @@ void initialDistances_N11_Case3C(ConvexDistanceGraph& cdg)
 
 	// No heptagon with d_1 on edge
 	cdg.addEdge(cdg.lookup[4][9], 0);
-	cdg.addEdge(cdg.lookup[3][7], 0);
+	cdg.addEdge(cdg.lookup[1][7], 0);
 }
 
 void initialDistances_N11_Case3D(ConvexDistanceGraph& cdg)
@@ -725,7 +755,8 @@ void initialDistances_N11_Case3D(ConvexDistanceGraph& cdg)
 	setMinD1Distance(cdg, 5);
 
 	// Not case B
-	cdg.addEdge(cdg.lookup[3][9], 0);
+	cdg.addEdge(cdg.lookup[2][8], 0);
+	cdg.addEdge(cdg.lookup[4][10], 0);
 }
 
 void initialDistances_N11_Case3E(ConvexDistanceGraph& cdg)
@@ -786,7 +817,7 @@ int main()
 {
 	ConvexDistanceGraph cdg = ConvexDistanceGraph();
 	
-	initialDistances_N11_Case3AI(cdg);
+	initialDistances_N11_Case3C(cdg);
 
 	if(!cdg.resolve()) printf("[ERROR] CONTRADICTION!\n");
 
