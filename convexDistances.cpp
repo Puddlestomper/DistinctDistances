@@ -308,6 +308,8 @@ struct ConvexDistanceGraph
 
 	bool chainFound(const std::array<int, totalNodes>& dists, int endInd, int dist = K-1)
 	{
+		// if(dist == K-1) printf("Chain start\n");
+		// printf("%s\n", toString(endInd).c_str());
 		if(!setDistance(endInd, dist))
 		{
 			printf("Chain contradiction! %s ", toString(endInd).c_str());
@@ -319,7 +321,7 @@ struct ConvexDistanceGraph
 		{
 			if(dists[i] == dist - 1) if(!chainFound(dists, i, dist - 1))
 			{
-				printf(" < %s ", toString(endInd).c_str());
+				printf(" > %s ", toString(endInd).c_str());
 				if(dist == K-1) printf("\n");
 				return false;
 			}
@@ -343,14 +345,18 @@ struct ConvexDistanceGraph
 	{
 		if(index < K)
 		{
-			if(index != distInd) printf("[ERROR] Special edge (%1i) set to wrong distance: %1i!\n", index, distInd);
-			return false;
+			if(index != distInd)
+			{
+				printf("[ERROR] Special edge (%1i) set to wrong distance: %1i!\n", index, distInd);
+				return false;
+			}
+			return true;
 		}
 		
 		if(nodes[index].dist == -1)
 		{
 			// printf("Add distance %.1i to edge %s", distInd, toString(index).c_str());
-			if(distInd == 0) printf("[INFO] Adding another largest distance at %s!\n", toString(index).c_str());
+			if(distInd == 0) printf("[INFO] Adding a largest distance at %s!\n", toString(index).c_str());
 
 			// for(int i = 0; i < K; i++) // Add relations to fixed distances - should not need this because it should be covered below by transitivity
 			// {
@@ -780,7 +786,7 @@ int main()
 {
 	ConvexDistanceGraph cdg = ConvexDistanceGraph();
 	
-	initialDistances_N11_Case3C(cdg);
+	initialDistances_N11_Case3AI(cdg);
 
 	if(!cdg.resolve()) printf("[ERROR] CONTRADICTION!\n");
 
