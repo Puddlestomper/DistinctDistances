@@ -9,12 +9,12 @@
 
 /*
 TODO:
-1. Apply Lemmas - bisector
-2. Apply Lemmas - quad
+1. Fix chain suggest
+2. Find new lemma that can be included.
 */
 
-#define N 9
-#define K 5
+#define N 11
+#define K 6
 
 constexpr int totalNodes = K + N * (N-1) / 2;
 
@@ -61,11 +61,13 @@ struct ConvexDistanceGraph
 
 		if(nodes.size() != totalNodes) printf("[ERROR] Wrong node amount!\n");
 
+		bool good = true;
 		// Set relationship between d_1 to d_K
 		for(int i = 0; i < K - 1; i++) for(int j = i + 1; j < K; j++)
 		{
-			addEdge(j, i);
+			good = good && addEdge(j, i);
 		}
+		if(!good) printf("[ERROR] CDG Init Went Wrong!\n");
 		for(int i = 0; i < K; i++)
 		{
 			nodes[i].dist = i;
@@ -81,19 +83,23 @@ struct ConvexDistanceGraph
 	{
 		// printf("[PRELOOP] Doing d1 nodes\n");
 
+		bool good = true;
+		
 		known_nodes[0].insert(known_nodes[0].end(), new_nodes.begin(), new_nodes.end()); // Append these distances to the list of d1 nodes
 		
-		for(int i : new_nodes) nodes[i].dist = 0;
+		for(int i : new_nodes) good = good && setDistance(i, 0);
 
 		if(noOtherD1Nodes) for(int i = 1; i < totalNodes; i++) if(nodes[i].dist != 0) // Everything else is less than d1
 		{
-			addEdge(i, 0);
-			for(int j : new_nodes) addEdge(i,j);
+			good = good && addEdge(i, 0);
+			for(int j : new_nodes) good = good && addEdge(i,j);
 		}
+
+		if(!good) printf("[ERROR] SetD1Nodes Problem!\n");
 	}
 
 	// Applies all calculations until no more change
-	void resolve()
+	bool resolve()
 	{
 		do
 		{
@@ -106,16 +112,16 @@ struct ConvexDistanceGraph
 			// printf("[LOOP] Here we go again\n");
 			change = false;
 
-			applyBisectorLemma();
+			if(!applyBisectorLemma()) return false;
 			applyQuadLemma();
 
 			// printf("[LOOP] Lemmas applied\n");
 
-			updateLowerBounds(); // If d_5 < a < b, then d_4 < b
+			if(!updateLowerBounds()) return false; // If d_5 < a < b, then d_4 < b
 
 			// printf("[LOOP] Lower bounds done\n");
 
-			resolveDistances(); // Look for chains of inequalities and update them. Also look for partial chains to upper bound distances
+			if(!resolveDistances()) return false; // Look for chains of inequalities and update them. Also look for partial chains to upper bound distances
 
 			// printf("[LOOP] Distances resolved\n");
 		} while (change);
@@ -125,9 +131,11 @@ struct ConvexDistanceGraph
 			setLowerBound(i, K-1);
 			setUpperBound(i, 0);
 		}
+
+		return true;
 	}
 
-	void applyBisectorLemma()
+	bool applyBisectorLemma()
 	{
 		// Must set change to true if adding an edge --- note the addEdge function does this for you.
 
@@ -156,11 +164,11 @@ struct ConvexDistanceGraph
 				perpBisecSolved[v2][v3] = true;
 				perpBisecSolved[v3][v2] = true;
 			}
-			else if(nodes[e12].edges.count(e13) > 0 || nodes[e12].dist == 0) // e12 > e13 or e12 is max dist (ie e12 >= e13)
+			else if(nodes[e12].edges.count(e13) > 0 || nodes[e12].lowBound <= nodes[e13].upBound) // e12 > e13 or e12 is at least as big as the upper bound for e13
 			{
 				left_flag = true;
 			}
-			else if(nodes[e13].edges.count(e12) > 0 || nodes[e13].dist == 0) // e12 < e13 or e13 is max dist (ie e13 >= e12)
+			else if(nodes[e13].edges.count(e12) > 0 || nodes[e13].lowBound <= nodes[e13].upBound) // e12 < e13 or e13 is at least as big as the upper bound for e12
 			{
 				right_flag = true;
 			}
@@ -176,7 +184,7 @@ struct ConvexDistanceGraph
 
 				// printf(" \t|%.3i, %.3i\n", e2j, e3j);
 
-				addEdge(e2j, e3j);
+				if(!addEdge(e2j, e3j)) return false;
 			}
 
 			if(left_flag) for(int j = 0; j < N - 3 - i2 - i3; j++) // everything clockwise from e13
@@ -186,9 +194,11 @@ struct ConvexDistanceGraph
 				int e2j = lookup[vj][v2];
 				int e3j = lookup[vj][v3];
 
-				addEdge(e3j, e2j);
+				if(!addEdge(e3j, e2j)) return false;
 			}
 		}
+
+		return true;
 	}
 
 	void applyQuadLemma()
@@ -198,7 +208,7 @@ struct ConvexDistanceGraph
 
 	// Find chains of K distances and set them
 	// BFS starting at d_1 and we want the longest distance to each node
-	void resolveDistances()
+	bool resolveDistances()
 	{
 		std::array<int, totalNodes> dists, parent;
 		std::array<bool, totalNodes> visited;
@@ -243,7 +253,7 @@ struct ConvexDistanceGraph
 		{
 			if(dists[i] == K-1)
 			{
-				chainFound(dists, i);
+				if(!chainFound(dists, i)) return false;
 				
 				// int node = i;
 				// int dist = K-1;
@@ -262,8 +272,10 @@ struct ConvexDistanceGraph
 
 		for(int i = K; i < totalNodes; i++)
 		{
-			if(dists[i] > 0) addEdge(i, dists[i] - 1);
+			if(dists[i] > 0) if(!addEdge(i, dists[i] - 1)) return false;
 		}
+
+		return true;
 	}
 
 	void runBFS(std::queue<int>& q, std::array<int, totalNodes>& dists, std::array<int, totalNodes>& parent, std::array<bool, totalNodes>& visited)
@@ -294,31 +306,45 @@ struct ConvexDistanceGraph
 		}
 	}
 
-	void chainFound(const std::array<int, totalNodes>& dists, int endInd, int dist = K-1)
+	bool chainFound(const std::array<int, totalNodes>& dists, int endInd, int dist = K-1)
 	{
-		if(dist == 0) return;
-		setDistance(endInd, dist);
+		if(!setDistance(endInd, dist))
+		{
+			printf("Chain contradiction! %s ", toString(endInd).c_str());
+			if(dist == K-1) printf("\n");
+			return false;
+		}
+		if(dist == 0) return true;
 		for(int i : nodes[endInd].in_edges)
 		{
-			if(dists[i] == dist - 1) chainFound(dists, i, dist - 1);
+			if(dists[i] == dist - 1) if(!chainFound(dists, i, dist - 1))
+			{
+				printf(" < %s ", toString(endInd).c_str());
+				if(dist == K-1) printf("\n");
+				return false;
+			}
 		}
+
+		return true;
 	}
 
-	void updateLowerBounds()
+	bool updateLowerBounds()
 	{
 		for(int k = K-1; k > 1; k--) for(int i : nodes[k].in_edges)
 		{
 			if(i < K) continue;
-			for(int j : nodes[i].in_edges) addEdge(k-1, j);
+			for(int j : nodes[i].in_edges) if(!addEdge(k-1, j)) return false;
 		}
+
+		return true;
 	}
 
-	void setDistance(int index, int distInd)
+	bool setDistance(int index, int distInd)
 	{
 		if(index < K)
 		{
 			if(index != distInd) printf("[ERROR] Special edge (%1i) set to wrong distance: %1i!\n", index, distInd);
-			return;
+			return false;
 		}
 		
 		if(nodes[index].dist == -1)
@@ -333,8 +359,8 @@ struct ConvexDistanceGraph
 			// }
 
 			// Update relations to other known edges
-			if(distInd > 0) for(int i : known_nodes[distInd - 1]) addEdge(index, i);
-			if(distInd < K - 1) for(int i : known_nodes[distInd + 1]) addEdge(i, index);
+			if(distInd > 0) for(int i : known_nodes[distInd - 1]) if(!addEdge(index, i)) return false;
+			if(distInd < K - 1) for(int i : known_nodes[distInd + 1]) if(!addEdge(i, index)) return false;
 
 			nodes[index].dist = distInd;
 			nodes[index].upBound = distInd;
@@ -345,12 +371,19 @@ struct ConvexDistanceGraph
 		else if(nodes[index].dist != distInd)
 		{
 			printf("[ERROR] Same edge (%s) set to two distances: %1i and %1i!\n", toString(index).c_str(), nodes[index].dist, distInd);
+			return false;
 		}
+
+		return true;
 	}
 
-	void addEdge(int a, int b, bool addingFixed = false) // a < b
+	bool addEdge(int a, int b, bool addingFixed = false) // a < b
 	{
-		if(a == b) printf("[ERROR] Same distance less than itself\n");
+		if(a == b)
+		{
+			printf("[ERROR] Same distance less than itself\n");
+			return false;
+		}
 		
 		nodes[a].in_edges.insert(b);
 		auto ans = nodes[b].edges.insert(a);
@@ -361,26 +394,31 @@ struct ConvexDistanceGraph
 		{
 			// if(a >= K && b >= K) printf("Added edge %s to %s with a=%.3i and b=%.3i\n", toString(a).c_str(), toString(b).c_str(), a, b);
 			
-			for(int i : nodes[a].edges) addEdge(i, b);
-			for(int i : nodes[b].in_edges) addEdge(a, i);
+			for(int i : nodes[a].edges) if(!addEdge(i, b)) return false;
+			for(int i : nodes[b].in_edges) if(!addEdge(a, i)) return false;
 
-			if(nodes[a].edges.count(b) > 0) printf("[ERROR] Edge %s and edge %s violate anti-symmetry!\n", toString(a).c_str(), toString(b).c_str());
+			if(nodes[a].edges.count(b) > 0)
+			{
+				printf("[ERROR] Edge %s and edge %s violate anti-symmetry!\n", toString(a).c_str(), toString(b).c_str());
+				return false;
+			}
 		}
 
 		if(ans.second && nodes[b].dist != -1 && nodes[a].dist == -1 && !addingFixed) // We know a is less than a fixed distance so it should also be less than everything else of that distance
 		{
 			int dist = nodes[b].dist;
 			if(nodes[a].upBound < dist + 1) setUpperBound(a, dist + 1);
-			for(int i : known_nodes[dist]) if(i != b) addEdge(a, i, true);
+			for(int i : known_nodes[dist]) if(i != b) if(!addEdge(a, i, true)) return false;
 		}
 
 		if(ans.second && nodes[a].dist != -1 && nodes[b].dist == -1 && !addingFixed) // We know b is more than a fixed distance so it should also be more than everything else of that distance
 		{
 			int dist = nodes[a].dist;
 			if(nodes[b].lowBound > dist - 1) setLowerBound(b, dist - 1);
-			for(int i : known_nodes[dist]) if(i != a) addEdge(i, b, true);
+			for(int i : known_nodes[dist]) if(i != a) if(!addEdge(i, b, true)) return false;
 		}
 
+		return true;
 	}
 
 	void setLowerBound(int index, int bound)
@@ -401,7 +439,7 @@ struct ConvexDistanceGraph
 	{
 		if(nodeIndex < K) return "d" + std::to_string(nodeIndex + 1);
 		
-		return "V" + std::to_string(nodes[nodeIndex].a + 1) + "-V" + std::to_string(nodes[nodeIndex].b + 1);
+		return "V" + std::to_string(nodes[nodeIndex].a + 1) + "-V" + std::to_string(nodes[nodeIndex].b + 1) + (nodes[nodeIndex].dist == -1 ? ("") : (" = d" + std::to_string(nodes[nodeIndex].dist + 1)));
 	}
 };
 
@@ -496,12 +534,12 @@ void printAlmostChains(const ConvexDistanceGraph& cdg)
 			int newtarget = -1;
 			for(int j : cdg.nodes[target].in_edges)
 			{
-				if(newtarget == -1) newtarget = j;
-				else if (newtarget < K && j >= K)
-				{
-					newtarget = j;
-					break;
-				}
+				if(newtarget == -1 && cdg.nodes[j].upBound >= dist-1) newtarget = j;
+				// else if (newtarget < K && j >= K)
+				// {
+				// 	newtarget = j;
+				// 	break;
+				// }
 			}
 
 			target = newtarget;
@@ -649,13 +687,23 @@ void initialDistances_N11_Case3C(ConvexDistanceGraph& cdg)
 {
 	assert(N == 11 && K == 6);
 	// Set everything which is d1, and any other necessary edge inequalities.
-	std::vector<std::pair<int, int>> d1_pairs = {{0, 5}, {0, 6}, {5, 10}, {4, 10}, {4, 9}};
+	std::vector<std::pair<int, int>> d1_pairs = {{0, 5}, {0, 6}, {5, 10}, {2, 8}, {3, 8}};
 	std::vector<int> d1_edges;
 
 	for(auto p : d1_pairs) d1_edges.push_back(cdg.lookup[p.first][p.second]);
 	cdg.setD1Nodes(d1_edges, false);
 
 	setMinD1Distance(cdg, 5);
+
+	// Not case B
+	cdg.addEdge(cdg.lookup[3][9], 0);
+	cdg.addEdge(cdg.lookup[2][7], 0);
+	cdg.addEdge(cdg.lookup[4][10], 0);
+	cdg.addEdge(cdg.lookup[1][6], 0);
+
+	// No heptagon with d_1 on edge
+	cdg.addEdge(cdg.lookup[4][9], 0);
+	cdg.addEdge(cdg.lookup[3][7], 0);
 }
 
 void initialDistances_N11_Case3D(ConvexDistanceGraph& cdg)
@@ -669,19 +717,26 @@ void initialDistances_N11_Case3D(ConvexDistanceGraph& cdg)
 	cdg.setD1Nodes(d1_edges, false);
 
 	setMinD1Distance(cdg, 5);
+
+	// Not case B
+	cdg.addEdge(cdg.lookup[3][9], 0);
 }
 
 void initialDistances_N11_Case3E(ConvexDistanceGraph& cdg)
 {
 	assert(N == 11 && K == 6);
 	// Set everything which is d1, and any other necessary edge inequalities.
-	std::vector<std::pair<int, int>> d1_pairs = {{0, 5}, {0, 6}, {5, 10}, {2, 8}, {3, 8}};
+	std::vector<std::pair<int, int>> d1_pairs = {{0, 5}, {0, 6}, {4, 9}, {4, 10}, {5, 10}};
 	std::vector<int> d1_edges;
 
 	for(auto p : d1_pairs) d1_edges.push_back(cdg.lookup[p.first][p.second]);
 	cdg.setD1Nodes(d1_edges, false);
 
 	setMinD1Distance(cdg, 5);
+
+	// Not case D
+	cdg.addEdge(cdg.lookup[3][9], 0);
+	cdg.addEdge(cdg.lookup[1][6], 0);
 }
 
 void initialDistances_N11_test(ConvexDistanceGraph& cdg)
@@ -725,10 +780,9 @@ int main()
 {
 	ConvexDistanceGraph cdg = ConvexDistanceGraph();
 	
-	initialDistances_N9_Case3A(cdg);
-	// initialDistances_N11_Case3B(cdg);
+	initialDistances_N11_Case3C(cdg);
 
-	cdg.resolve();
+	if(!cdg.resolve()) printf("[ERROR] CONTRADICTION!\n");
 
 	fullPrint(cdg);
 
