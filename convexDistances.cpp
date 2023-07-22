@@ -9,8 +9,9 @@
 
 /*
 TODO:
-1. Fix chain suggest
-2. Find new lemma that can be included.
+1. Find new lemma that can be included.
+2. Automatically break down into cases until it can solve them
+3. Find chains can see which edges appear most often in the chains and then give score based on how "influential" the edges in a chain is
 */
 
 #define N 11
@@ -517,7 +518,7 @@ void recusivePrint(const ConvexDistanceGraph& cdg, int target, int dist = 0, std
 	
 	if(dist == K-2 && cdg.nodes[target].edges.size() == 0 && newscore >= K-2)
 	{
-		printf("%s%s | Score: %1i\n", chain.c_str(), cdg.toString(target).c_str(), newscore);
+		printf("%s%s | Unknowns: %1i\n", chain.c_str(), cdg.toString(target).c_str(), newscore);
 		return;
 	}
 
@@ -716,6 +717,8 @@ void initialDistances_N11_Case3B(ConvexDistanceGraph& cdg)
 	for(auto p : d1_pairs) d1_edges.push_back(cdg.lookup[p.first][p.second]);
 	cdg.setD1Nodes(d1_edges, false);
 
+	
+
 	setMinD1Distance(cdg, 5);
 }
 
@@ -732,14 +735,20 @@ void initialDistances_N11_Case3C(ConvexDistanceGraph& cdg)
 	setMinD1Distance(cdg, 5);
 
 	// Not case B
-	cdg.addEdge(cdg.lookup[3][9], 0);
-	cdg.addEdge(cdg.lookup[2][7], 0);
-	cdg.addEdge(cdg.lookup[4][10], 0);
-	cdg.addEdge(cdg.lookup[1][6], 0);
+	cdg.addEdge(cdg.lookup[3][9], 0);  // d(v_4,v_10) < d_1
+	cdg.addEdge(cdg.lookup[2][7], 0);  // d(v_3,v_8) < d_1
+	cdg.addEdge(cdg.lookup[4][10], 0); // d(v_5,v_11) < d_1
+	cdg.addEdge(cdg.lookup[1][6], 0);  // d(v_2,v_7) < d_1
 
 	// No heptagon with d_1 on edge
-	cdg.addEdge(cdg.lookup[4][9], 0);
-	cdg.addEdge(cdg.lookup[1][7], 0);
+	cdg.addEdge(cdg.lookup[4][9], 0); // d(v_5,v_10) < d_1
+	cdg.addEdge(cdg.lookup[1][7], 0); // d(v_2,v_8) < d_1
+
+	// What Jack deduced
+	cdg.setDistance(cdg.lookup[2][7], 1); // Here 1 = d_2 (we are 0 indexed for everything)
+	cdg.setDistance(cdg.lookup[3][9], 1);
+	cdg.setDistance(cdg.lookup[4][9], 2);
+	cdg.setDistance(cdg.lookup[1][7], 2);
 }
 
 void initialDistances_N11_Case3D(ConvexDistanceGraph& cdg)
