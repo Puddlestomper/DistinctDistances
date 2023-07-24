@@ -14,6 +14,9 @@ TODO:
 3. Find chains can see which edges appear most often in the chains and then give score based on how "influential" the edges in a chain is
 */
 
+struct ConvexDistanceGraph;
+void printKnownDistances(const ConvexDistanceGraph& cdg);
+
 #define N 11
 #define K 6
 
@@ -36,6 +39,10 @@ struct ConvexDistanceGraph
 	std::vector<int> known_nodes[K]; // Will include fixed distance nodes
 	std::array<std::array<int, N>, N> lookup;
 	bool change = false;
+	
+	// Tracing
+	bool tracing = false;
+	int targetA = -1, targetB = -1;
 
 	// Caching
 	std::array<std::array<bool, N>, N> perpBisecSolved;
@@ -98,33 +105,42 @@ struct ConvexDistanceGraph
 
 		if(!good) printf("[ERROR] SetD1Nodes Problem!\n");
 	}
+	
+	// Tries to find the logic used to deduce that a < b
+	void setTrackingTarget(int a, int b)
+	{
+		targetA = a;
+		targetB = b;
+		tracing = true;
+	}
 
 	// Applies all calculations until no more change
 	bool resolve()
 	{
 		do
 		{
+			if(tracing) printf("[TRACE] Loop begin\n");
+			
+			change = false;
+			
 			for(int i = K; i < totalNodes; i++)
 			{
 				setLowerBound(i, K-1);
 				setUpperBound(i, 0);
 			}
 			
-			// printf("[LOOP] Here we go again\n");
-			change = false;
-
+			if(tracing) printf("[TRACE] Bisector Lemma Start\n");
+			
 			if(!applyBisectorLemma()) return false;
 			applyQuadLemma();
 
-			// printf("[LOOP] Lemmas applied\n");
-
+			if(tracing) printf("[TRACE] Update Lower Bounds Start\n");
+			
 			if(!updateLowerBounds()) return false; // If d_5 < a < b, then d_4 < b
-
-			// printf("[LOOP] Lower bounds done\n");
+			
+			if(tracing) printf("[TRACE] Find Chains Start\n");
 
 			if(!resolveDistances()) return false; // Look for chains of inequalities and update them. Also look for partial chains to upper bound distances
-
-			// printf("[LOOP] Distances resolved\n");
 		} while (change);
 
 		for(int i = K; i < totalNodes; i++)
@@ -169,9 +185,16 @@ struct ConvexDistanceGraph
 			{
 				left_flag = true;
 			}
-			else if(nodes[e13].edges.count(e12) > 0 || nodes[e13].lowBound <= nodes[e13].upBound) // e12 < e13 or e13 is at least as big as the upper bound for e12
+			else if(nodes[e13].edges.count(e12) > 0 || nodes[e13].lowBound <= nodes[e12].upBound) // e12 < e13 or e13 is at least as big as the upper bound for e12
 			{
 				right_flag = true;
+			}
+			
+			if(tracing)
+			{
+				if(left_flag && right_flag) printf("[TRACE] Applying bisector with edges %s and %s both left and right\n", toString(e12).c_str(), toString(e13).c_str());
+				else if(left_flag) printf("[TRACE] Applying bisector with edges %s and %s to the left\n", toString(e12).c_str(), toString(e13).c_str());
+				else if(right_flag) printf("[TRACE] Applying bisector with edges %s and %s to the right\n", toString(e12).c_str(), toString(e13).c_str());
 			}
 
 			if(right_flag) for(int j = 0; j < i2; j++) // everything counter clockwise from e12
@@ -313,7 +336,7 @@ struct ConvexDistanceGraph
 		// printf("%s\n", toString(endInd).c_str());
 		if(!setDistance(endInd, dist))
 		{
-			printf("Chain contradiction! %s ", toString(endInd).c_str());
+			printf("[ERROR] Chain contradiction! %s ", toString(endInd).c_str());
 			if(dist == K-1) printf("\n");
 			return false;
 		}
@@ -357,7 +380,7 @@ struct ConvexDistanceGraph
 		if(nodes[index].dist == -1)
 		{
 			// printf("Add distance %.1i to edge %s", distInd, toString(index).c_str());
-			if(distInd == 0) printf("[INFO] Adding a largest distance at %s!\n", toString(index).c_str());
+			printf("[INFO] Adding a d%1i distance at %s!\n", distInd + 1, toString(index).c_str());
 
 			// for(int i = 0; i < K; i++) // Add relations to fixed distances - should not need this because it should be covered below by transitivity
 			// {
@@ -399,7 +422,12 @@ struct ConvexDistanceGraph
 
 		if(ans.second) // Transitivity if it actually adds a new edge
 		{
-			// if(a >= K && b >= K) printf("Added edge %s to %s with a=%.3i and b=%.3i\n", toString(a).c_str(), toString(b).c_str(), a, b);
+			if(tracing && a == targetA && b == targetB)
+			{
+				printf("[TRACE] Target here!\n");
+				printKnownDistances(*this);
+			}
+			if(tracing && a >= K && b >= K) printf("[TRACE] Added edge %s < %s\n", toString(a).c_str(), toString(b).c_str());
 			
 			for(int i : nodes[a].edges) if(!addEdge(i, b)) return false;
 			for(int i : nodes[b].in_edges) if(!addEdge(a, i)) return false;
@@ -596,14 +624,14 @@ void printEdgesKnown(const ConvexDistanceGraph& cdg)
 	printf("Known edges: %i / %i\n", knownEdges, totalEdges);
 }
 
-void fullPrint(const ConvexDistanceGraph& cdg)
+void fullPrint(const ConvexDistanceGraph& cdg, bool findChains = true)
 {
 	printf("----------------------------------\n");
 	
 	printKnownDistances(cdg);
 
 	// printAlmostChains(cdg);
-	printAlmostChains2(cdg);
+	if(findChains) printAlmostChains2(cdg);
 
 	printEdgesKnown(cdg);
 }
@@ -826,11 +854,16 @@ int main()
 {
 	ConvexDistanceGraph cdg = ConvexDistanceGraph();
 	
-	initialDistances_N11_Case3C(cdg);
+	initialDistances_N11_Case3D(cdg);
+	
+	// Note: This will spam stuff out. Look for the part where it prints the distances and upper/lower bounds in the middle before the end
+	// cdg.setTrackingTarget(cdg.lookup[5][8], cdg.lookup[2][5]); // Remember to zero-index
 
-	if(!cdg.resolve()) printf("[ERROR] CONTRADICTION!\n");
+	bool resolved = cdg.resolve();
+	
+	if(!resolved) printf("[ERROR] CONTRADICTION!\n");
 
-	fullPrint(cdg);
+	fullPrint(cdg, resolved);
 
 	return 0;
 }
