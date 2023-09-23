@@ -8,16 +8,26 @@
 #include <cassert>
 
 /*
+In this file we assume that our points are the points of a diameter graph, and so each point should have at least one d1 segment.
+
 TODO:
+1. Add equality tracking
+2. Quad congruence
+3. Add score to edges based on potential chains, use this to automatically go through all cases (based on some initial setup).
+
+
+Potential future changes:
 1. Find new lemma that can be included.
 2. Automatically break down into cases until it can solve them
 3. Find chains can see which edges appear most often in the chains and then give score based on how "influential" the edges in a chain is
+4. Refactor so ConvexDistanceGraph is a template in N and K
+
 */
 
 struct ConvexDistanceGraph;
 void printKnownDistances(const ConvexDistanceGraph& cdg);
 
-#define N 11
+#define N 10
 #define K 6
 
 constexpr int totalNodes = K + N * (N-1) / 2;
@@ -37,6 +47,7 @@ struct ConvexDistanceGraph
 {
 	std::vector<Node> nodes;
 	std::vector<int> known_nodes[K]; // Will include fixed distance nodes
+	int known_distances = 0;
 	std::array<std::array<int, N>, N> lookup;
 	bool change = false;
 	
@@ -140,6 +151,8 @@ struct ConvexDistanceGraph
 			if(tracing) printf("[TRACE] Find Chains Start\n");
 
 			if(!resolveDistances()) return false; // Look for chains of inequalities and update them. Also look for partial chains to upper bound distances
+
+			if(known_distances >= 6) if(!applyQuadCongruence()) return false;
 		} while (change);
 
 		for(int i = K; i < totalNodes; i++)
@@ -221,6 +234,13 @@ struct ConvexDistanceGraph
 			}
 		}
 
+		return true;
+	}
+
+	// Loop through pairs of quads in order to find congruences.
+	// TODO: Pre-generate lists of quads.
+	bool applyQuadCongruence()
+	{
 		return true;
 	}
 
@@ -375,6 +395,7 @@ struct ConvexDistanceGraph
 		{
 			// printf("Add distance %.1i to edge %s", distInd, toString(index).c_str());
 			printf("[INFO] Adding a d%1i distance at %s!\n", distInd + 1, toString(index).c_str());
+			known_distances++;
 
 			// for(int i = 0; i < K; i++) // Add relations to fixed distances - should not need this because it should be covered below by transitivity
 			// {
@@ -648,7 +669,7 @@ void fullPrint(const ConvexDistanceGraph& cdg, bool findChains = true)
 
 
 
-void setMinD1Distance(ConvexDistanceGraph& cdg, int dist) // everything less than i to i+dist will be less than d1
+void setIndex(ConvexDistanceGraph& cdg, int dist) // everything less than i to i+dist will be less than d1
 {
 	for(int i = 0; i < N; i++)
 	{
@@ -657,171 +678,65 @@ void setMinD1Distance(ConvexDistanceGraph& cdg, int dist) // everything less tha
 			int v2 = (i + j) % N;
 			int e = cdg.lookup[i][v2];
 			cdg.addEdge(e, 0);
+
+			for(int k = 1; k <= dist - j; k++)
+			{
+				int v3 = (v2 + k) % N;
+				int a = cdg.lookup[i][v3];
+				int b = cdg.lookup[v2][v3];
+
+				cdg.addEdge(b,a);
+			}
+
+			for(int k = 1; k <= dist - j; k++)
+			{
+				int v3 = (i + N - k) % N;
+				int a = cdg.lookup[i][v3];
+				int b = cdg.lookup[v2][v3];
+
+				cdg.addEdge(a,b);
+			}
 		}
 	}
 }
 
-void initialDistances_N9_Case3A(ConvexDistanceGraph& cdg)
-{
-	assert(N == 9 && K == 5);
-	// Set everything which is d1, and any other necessary edge inequalities.
-	std::vector<std::pair<int, int>> d1_pairs = {{0, 4}, {0, 5}, {1, 6}, {2, 6}, {3, 7}, {3, 8}};
-	std::vector<int> d1_edges;
-
-	for(auto p : d1_pairs) d1_edges.push_back(cdg.lookup[p.first][p.second]);
-	cdg.setD1Nodes(d1_edges, true); // It is assumed that there are no other edges of length d1, I can change this if need be.
-}
-
-void initialDistances_N9_Case3B(ConvexDistanceGraph& cdg)
-{
-	assert(N == 9 && K == 5);
-	// Set everything which is d1, and any other necessary edge inequalities.
-	std::vector<std::pair<int, int>> d1_pairs = {{0, 4}, {0, 5}, {4, 8}, {2, 6}, {2, 7}};
-	std::vector<int> d1_edges;
-
-	for(auto p : d1_pairs) d1_edges.push_back(cdg.lookup[p.first][p.second]);
-	cdg.setD1Nodes(d1_edges, false); 
-
-	setMinD1Distance(cdg, 4); // Set minimum distance between nodes for a distance d1
-}
-
-void initialDistances_N11_Case3AI(ConvexDistanceGraph& cdg)
+void initialDistances_N11_indexOnly(ConvexDistanceGraph& cdg)
 {
 	assert(N == 11 && K == 6);
-	// Set everything which is d1, and any other necessary edge inequalities.
-	std::vector<std::pair<int, int>> d1_pairs = {{0, 5}, {0, 6}, {9, 3}, {9, 4}, {2, 7}, {2, 8}};
-	std::vector<int> d1_edges;
 
-	for(auto p : d1_pairs) d1_edges.push_back(cdg.lookup[p.first][p.second]);
-	cdg.setD1Nodes(d1_edges, true); // True = It is assumed that there are no other edges of length d1
+	int index = 5;
+
+	setIndex(cdg, index);
+
+	cdg.setDistance(cdg.lookup[0][index],0);
 }
 
-void initialDistances_N11_Case3AII(ConvexDistanceGraph& cdg)
+void initialDistances_N10_indexOnly(ConvexDistanceGraph& cdg)
 {
-	assert(N == 11 && K == 6);
-	// Set everything which is d1, and any other necessary edge inequalities.
-	std::vector<std::pair<int, int>> d1_pairs = {{0, 5}, {0, 6}, {9, 3}, {9, 4}, {1, 7}, {2, 7}};
-	std::vector<int> d1_edges;
+	assert(N == 10 && K == 6);
 
-	for(auto p : d1_pairs) d1_edges.push_back(cdg.lookup[p.first][p.second]);
-	cdg.setD1Nodes(d1_edges, true); // True = It is assumed that there are no other edges of length d1
+	int index = 4;
+
+	setIndex(cdg, index);
+
+	cdg.setDistance(cdg.lookup[0][index],0);
 }
 
-void initialDistances_N11_Case3AIII(ConvexDistanceGraph& cdg)
+void initialDistances_N10_Case1(ConvexDistanceGraph& cdg)
 {
-	assert(N == 11 && K == 6);
-	// Set everything which is d1, and any other necessary edge inequalities.
-	std::vector<std::pair<int, int>> d1_pairs = {{0, 5}, {0, 6}, {3, 9}, {3, 8}, {1, 7}, {2, 7}};
-	std::vector<int> d1_edges;
+	assert(N == 10 && K == 6);
 
-	for(auto p : d1_pairs) d1_edges.push_back(cdg.lookup[p.first][p.second]);
-	cdg.setD1Nodes(d1_edges, true); // True = It is assumed that there are no other edges of length d1
-}
+	setIndex(cdg, 5);
 
-void initialDistances_N11_Case3AIV(ConvexDistanceGraph& cdg)
-{
-	assert(N == 11 && K == 6);
-	// Set everything which is d1, and any other necessary edge inequalities.
-	std::vector<std::pair<int, int>> d1_pairs = {{0, 5}, {0, 6}, {4, 9}, {4, 10}, {1, 7}, {2, 7}};
-	std::vector<int> d1_edges;
-
-	for(auto p : d1_pairs) d1_edges.push_back(cdg.lookup[p.first][p.second]);
-	cdg.setD1Nodes(d1_edges, true); // True = It is assumed that there are no other edges of length d1
-}
-
-void initialDistances_N11_Case3B(ConvexDistanceGraph& cdg)
-{
-	assert(N == 11 && K == 6);
-	// Set everything which is d1, and any other necessary edge inequalities.
-	std::vector<std::pair<int, int>> d1_pairs = {{0, 5}, {0, 6}, {5, 10}, {3, 8}, {3, 9}};
-	std::vector<int> d1_edges;
-
-	for(auto p : d1_pairs) d1_edges.push_back(cdg.lookup[p.first][p.second]);
-	cdg.setD1Nodes(d1_edges, false);
-
+	for(int i = 0; i < N; i++)
+		cdg.setDistance(cdg.lookup[i][(i + 5) % N],0); // In combination with the index, nothing else can be set
 	
+	// Since all the i,i+4 edges can't be d1, they have to be d2 by Jack's work:
+	for(int i = 0; i < N; i++)
+		cdg.setDistance(cdg.lookup[i][(i + 4) % N],1);
 
-	setMinD1Distance(cdg, 5);
-}
-
-void initialDistances_N11_Case3C(ConvexDistanceGraph& cdg)
-{
-	assert(N == 11 && K == 6);
-	// Set everything which is d1, and any other necessary edge inequalities.
-	std::vector<std::pair<int, int>> d1_pairs = {{0, 5}, {0, 6}, {5, 10}, {2, 8}, {3, 8}};
-	std::vector<int> d1_edges;
-
-	for(auto p : d1_pairs) d1_edges.push_back(cdg.lookup[p.first][p.second]);
-	cdg.setD1Nodes(d1_edges, false);
-
-	setMinD1Distance(cdg, 5);
-
-	// Not case B
-	cdg.addEdge(cdg.lookup[3][9], 0);  // d(v_4,v_10) < d_1
-	cdg.addEdge(cdg.lookup[2][7], 0);  // d(v_3,v_8) < d_1
-	cdg.addEdge(cdg.lookup[4][10], 0); // d(v_5,v_11) < d_1
-	cdg.addEdge(cdg.lookup[1][6], 0);  // d(v_2,v_7) < d_1
-
-	// No heptagon with d_1 on edge
-	cdg.addEdge(cdg.lookup[4][9], 0); // d(v_5,v_10) < d_1
-	cdg.addEdge(cdg.lookup[1][7], 0); // d(v_2,v_8) < d_1
-
-	// What Jack deduced
-	cdg.setDistance(cdg.lookup[2][7], 1); // Here 1 = d_2 (we are 0 indexed for everything)
-	cdg.setDistance(cdg.lookup[3][9], 1);
-	cdg.setDistance(cdg.lookup[4][9], 2);
-	cdg.setDistance(cdg.lookup[1][7], 2);
-}
-
-void initialDistances_N11_Case3D(ConvexDistanceGraph& cdg)
-{
-	assert(N == 11 && K == 6);
-	// Set everything which is d1, and any other necessary edge inequalities.
-	std::vector<std::pair<int, int>> d1_pairs = {{0, 5}, {0, 6}, {5, 10}, {1, 7}, {2, 7}};
-	std::vector<int> d1_edges;
-
-	for(auto p : d1_pairs) d1_edges.push_back(cdg.lookup[p.first][p.second]);
-	cdg.setD1Nodes(d1_edges, false);
-
-	setMinD1Distance(cdg, 5);
-
-	// Not case B
-	cdg.addEdge(cdg.lookup[2][8], 0);
-	cdg.addEdge(cdg.lookup[4][10], 0);
-}
-
-void initialDistances_N11_Case3E(ConvexDistanceGraph& cdg)
-{
-	assert(N == 11 && K == 6);
-	// Set everything which is d1, and any other necessary edge inequalities.
-	std::vector<std::pair<int, int>> d1_pairs = {{0, 5}, {0, 6}, {4, 9}, {4, 10}, {5, 10}};
-	std::vector<int> d1_edges;
-
-	for(auto p : d1_pairs) d1_edges.push_back(cdg.lookup[p.first][p.second]);
-	cdg.setD1Nodes(d1_edges, false);
-
-	setMinD1Distance(cdg, 5);
-
-	// Not case D
-	cdg.addEdge(cdg.lookup[3][9], 0);
-	cdg.addEdge(cdg.lookup[1][6], 0);
-}
-
-void initialDistances_N11_test(ConvexDistanceGraph& cdg)
-{
-	assert(N == 11 && K == 6);
-	
-	std::vector<std::pair<int, int>> d1_pairs = {{0, 4}, {0, 5}, {4, 10}};
-	std::vector<int> d1_edges;
-
-	for(auto p : d1_pairs)
-	{
-		d1_edges.push_back(cdg.lookup[p.first][p.second]);
-	}
-
-	cdg.setD1Nodes(d1_edges, true);
-
-	setMinD1Distance(cdg, 4);
+	for(int i = 0; i < N; i++)
+		cdg.setDistance(cdg.lookup[i][(i + 3) % N],3);
 }
 
 void time_test()
@@ -832,7 +747,7 @@ void time_test()
 	{
 		ConvexDistanceGraph cdg = ConvexDistanceGraph();
 	
-		initialDistances_N9_Case3A(cdg);
+		initialDistances_N11_indexOnly(cdg);
 
 		cdg.resolve();
 
@@ -848,7 +763,7 @@ int main()
 {
 	ConvexDistanceGraph cdg = ConvexDistanceGraph();
 	
-	initialDistances_N11_Case3AIII(cdg);
+	initialDistances_N10_Case1(cdg);
 	
 	// Note: This will spam stuff out. Look for the part where it prints the distances and upper/lower bounds in the middle before the end
 	// cdg.setTrackingTarget(cdg.lookup[5][8], cdg.lookup[2][5]); // Remember to zero-index
